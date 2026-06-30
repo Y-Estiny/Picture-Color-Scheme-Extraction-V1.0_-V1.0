@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>图片主色提取色卡</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="intro-band" aria-label="工具介绍">
+        <div>
+          <p class="eyebrow">Palette Studio</p>
+          <h1>图片主色提取色卡</h1>
+          <p class="intro-copy">选择一张图片，自动识别主要配色、HEX 色值与画面占比，生成可复制、可下载的视觉色卡。</p>
+        </div>
+        <div class="privacy-note">本地识别 · 图片不上传</div>
+      </section>
+
+      <section class="workspace" aria-label="图片取色工作区">
+        <div class="panel upload-panel">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Image</p>
+              <h2>选择图片</h2>
+            </div>
+            <button class="ghost-button" id="loadSampleButton" type="button">载入示例</button>
+          </div>
+
+          <label class="drop-zone" id="dropZone">
+            <input id="imageInput" type="file" accept="image/*" />
+            <span class="upload-mark" aria-hidden="true">
+              <span></span>
+            </span>
+            <strong>点击上传，或拖入图片</strong>
+            <small>支持 JPG、PNG、WebP 等常见格式</small>
+          </label>
+
+          <div class="preview-frame" id="previewFrame">
+            <img id="previewImage" alt="待提取颜色的图片预览" />
+            <div class="empty-preview" id="emptyPreview">
+              <span>预览区</span>
+            </div>
+          </div>
+
+          <div class="control-strip" aria-label="取色设置">
+            <label>
+              <span>色卡数量</span>
+              <input id="colorCount" type="range" min="3" max="9" value="6" />
+            </label>
+            <output id="colorCountValue" for="colorCount">6 色</output>
+          </div>
+        </div>
+
+        <div class="panel palette-panel">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Palette</p>
+              <h2>主色卡</h2>
+            </div>
+            <button class="primary-button" id="downloadButton" type="button" disabled>保存配色</button>
+          </div>
+
+          <div class="palette-summary" id="paletteSummary">
+            <div>
+              <span id="summaryTotal">0</span>
+              <small>已识别颜色</small>
+            </div>
+            <div>
+              <span id="summaryTop">--</span>
+              <small>最高占比</small>
+            </div>
+          </div>
+
+          <div class="palette-stack" id="paletteStack" aria-label="图片主色占比分布"></div>
+          <div class="swatch-grid" id="swatchGrid" aria-live="polite"></div>
+
+          <div class="export-panel" id="exportPanel" hidden>
+            <div class="record-head">
+              <div>
+                <p class="section-kicker">Export</p>
+                <h3>软件色卡导出</h3>
+              </div>
+              <button class="ghost-button small-button" type="button" data-export="all">导出全部</button>
+            </div>
+            <div class="export-grid" aria-label="软件色卡导出格式">
+              <button class="export-button" type="button" data-export="ase">
+                <strong>ASE</strong>
+                <span>Adobe 色板</span>
+              </button>
+              <button class="export-button" type="button" data-export="stylx">
+                <strong>STYLX</strong>
+                <span>ArcGIS Pro</span>
+              </button>
+              <button class="export-button" type="button" data-export="qgis">
+                <strong>XML</strong>
+                <span>QGIS 样式</span>
+              </button>
+              <button class="export-button" type="button" data-export="thmx">
+                <strong>THMX</strong>
+                <span>Office 主题</span>
+              </button>
+              <button class="export-button" type="button" data-export="json">
+                <strong>JSON</strong>
+                <span>通用数据</span>
+              </button>
+              <button class="export-button" type="button" data-export="css">
+                <strong>CSS</strong>
+                <span>网页变量</span>
+              </button>
+              <button class="export-button" type="button" data-export="scss">
+                <strong>SCSS</strong>
+                <span>Sass 变量</span>
+              </button>
+              <button class="export-button" type="button" data-export="csv">
+                <strong>CSV</strong>
+                <span>表格交换</span>
+              </button>
+            </div>
+            <p class="record-hint">ArcGIS Pro 的 .stylx 属于原生样式库格式，当前导出为可迁移的颜色样式清单，建议导入前先用小样本验证。</p>
+          </div>
+
+          <div class="empty-state" id="emptyState">
+            上传图片后，这里会显示每个主色的 HEX 和占比。
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <canvas id="analysisCanvas" hidden></canvas>
+    <script src="./app.js"></script>
+  </body>
+</html>
