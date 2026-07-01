@@ -1,9 +1,8 @@
-const SAMPLE_IMAGE = "input/橙蓝调夏日感图纸_1_zzlarki设计日记_来自小红书网页版.jpg";
+const SAMPLE_IMAGE = "input/Namen_1.webp";
 
 const imageInput = document.querySelector("#imageInput");
 const dropZone = document.querySelector("#dropZone");
 const previewFrame = document.querySelector("#previewFrame");
-const previewImage = document.querySelector("#previewImage");
 const colorCount = document.querySelector("#colorCount");
 const colorCountValue = document.querySelector("#colorCountValue");
 const palettePanel = document.querySelector(".palette-panel");
@@ -21,6 +20,7 @@ const textEncoder = new TextEncoder();
 let activeImageName = "palette";
 let currentPalette = [];
 let objectUrl = null;
+let previewImage = null;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -32,10 +32,6 @@ function componentToHex(value) {
 
 function rgbToHex({ r, g, b }) {
   return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`;
-}
-
-function hexWithoutHash(hex) {
-  return hex.replace("#", "").toUpperCase();
 }
 
 function sanitizeFilename(name) {
@@ -221,7 +217,7 @@ function clusterColors(points, targetCount) {
 }
 
 function analyzeActiveImage() {
-  if (!previewImage.complete || !previewImage.naturalWidth) return;
+  if (!previewImage || !previewImage.complete || !previewImage.naturalWidth) return;
 
   const maxSide = 620;
   const ratio = Math.min(1, maxSide / Math.max(previewImage.naturalWidth, previewImage.naturalHeight));
@@ -295,17 +291,40 @@ function renderPalette(palette) {
   }
 }
 
+function ensurePreviewImage() {
+  if (previewImage) return previewImage;
+
+  previewImage = document.createElement("img");
+  previewImage.id = "previewImage";
+  previewImage.alt = "待提取颜色的图片预览";
+  previewFrame.prepend(previewImage);
+  return previewImage;
+}
+
 function loadImage(src, name = "palette") {
+  if (!src) {
+    previewFrame.classList.remove("has-image");
+    if (previewImage) {
+      previewImage.remove();
+      previewImage = null;
+    }
+    renderPalette([]);
+    return;
+  }
+
   activeImageName = name.replace(/\.[^.]+$/, "") || "palette";
-  previewImage.onload = () => {
+  const image = ensurePreviewImage();
+  image.onload = () => {
     previewFrame.classList.add("has-image");
     analyzeActiveImage();
   };
-  previewImage.onerror = () => {
+  image.onerror = () => {
     previewFrame.classList.remove("has-image");
+    image.remove();
+    previewImage = null;
     renderPalette([]);
   };
-  previewImage.src = src;
+  image.src = src;
 }
 
 function loadFile(file) {
@@ -355,6 +374,56 @@ function drawContainedImage(context, image, x, y, width, height) {
   context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
 }
 
+function roundedRectPath(context, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.lineTo(x + width - r, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + r);
+  context.lineTo(x + width, y + height - r);
+  context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  context.lineTo(x + r, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - r);
+  context.lineTo(x, y + r);
+  context.quadraticCurveTo(x, y, x + r, y);
+  context.closePath();
+}
+
+function fillRoundedRect(context, x, y, width, height, radius, fillStyle) {
+  context.fillStyle = fillStyle;
+  roundedRectPath(context, x, y, width, height, radius);
+  context.fill();
+}
+
+function strokeRoundedRect(context, x, y, width, height, radius, strokeStyle, lineWidth = 1) {
+  context.strokeStyle = strokeStyle;
+  context.lineWidth = lineWidth;
+  roundedRectPath(context, x, y, width, height, radius);
+  context.stroke();
+}
+
+function paletteRgba(color, alpha) {
+  return `rgba(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)}, ${alpha})`;
+}
+
+function fittedCanvasText(context, text, maxWidth) {
+  if (context.measureText(text).width <= maxWidth) return text;
+
+  const ellipsis = "...";
+  let start = 0;
+  let end = text.length;
+  while (start < end) {
+    const middle = Math.ceil((start + end) / 2);
+    const candidate = `${text.slice(0, middle)}${ellipsis}`;
+    if (context.measureText(candidate).width <= maxWidth) {
+      start = middle;
+    } else {
+      end = middle - 1;
+    }
+  }
+  return `${text.slice(0, start)}${ellipsis}`;
+}
+
 function makeTextBlob(text, type) {
   return new Blob([text], { type: `${type};charset=utf-8` });
 }
@@ -373,41 +442,6 @@ function buildCsvText() {
       .join(","),
   );
   return `\uFEFF${header.join(",")}\n${rows.join("\n")}\n`;
-}
-
-function buildCssText() {
-  const lines = [
-    `/* Palette from ${activeImageName} */`,
-    ":root {",
-  ];
-
-  for (const row of paletteRows()) {
-    lines.push(`  --palette-color-${row.rank}: ${row.hex};`);
-    lines.push(`  --palette-color-${row.rank}-rgb: ${row.r}, ${row.g}, ${row.b};`);
-    lines.push(`  --palette-color-${row.rank}-ratio: ${row.ratio};`);
-  }
-
-  lines.push("}");
-  return `${lines.join("\n")}\n`;
-}
-
-function buildScssText() {
-  const rows = paletteRows();
-  const lines = [`// Palette from ${activeImageName}`];
-
-  for (const row of rows) {
-    lines.push(`$palette-color-${row.rank}: ${row.hex};`);
-    lines.push(`$palette-color-${row.rank}-ratio: ${row.ratio};`);
-  }
-
-  lines.push("");
-  lines.push("$palette-colors: (");
-  for (const row of rows) {
-    lines.push(`  "${row.rank}": (color: ${row.hex}, ratio: ${row.ratio}, percent: ${row.percent}),`);
-  }
-  lines.push(");");
-
-  return `${lines.join("\n")}\n`;
 }
 
 function buildQgisStyleXml() {
@@ -439,32 +473,6 @@ ${rows.map((row) => `    <color name="${escapeXml(row.name)}" color="${row.hex}"
   </colors>
 </qgis_style>
 `;
-}
-
-function buildArcGisStylxManifest() {
-  const rows = paletteRows();
-  return JSON.stringify(
-    {
-      type: "arcgis_pro_palette_transfer",
-      format_note:
-        "ArcGIS Pro .stylx is a native style database. This browser export stores palette colors and CIM RGB values for recreating a Pro style.",
-      source: activeImageName,
-      color_count: rows.length,
-      colors: rows.map((row) => ({
-        name: row.name,
-        hex: row.hex,
-        rgb: [row.r, row.g, row.b],
-        cim_color: {
-          type: "CIMRGBColor",
-          values: [row.r, row.g, row.b, 100],
-        },
-        ratio: row.ratio,
-        percent: row.percent,
-      })),
-    },
-    null,
-    2,
-  );
 }
 
 function buildAseBlob() {
@@ -628,88 +636,6 @@ function makeZipBlob(files) {
   return new Blob([concatBytes([...locals, centralDirectory, end])], { type: "application/zip" });
 }
 
-function buildOfficeThemeXml() {
-  const rows = paletteRows();
-  const getColor = (index, fallback) => hexWithoutHash(rows[index % rows.length]?.hex || fallback);
-  const accents = Array.from({ length: 6 }, (_, index) => getColor(index, "4F81BD"));
-
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="${escapeXml(activeImageName)} Palette">
-  <a:themeElements>
-    <a:clrScheme name="${escapeXml(activeImageName)}">
-      <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>
-      <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
-      <a:dk2><a:srgbClr val="${getColor(0, "1F497D")}"/></a:dk2>
-      <a:lt2><a:srgbClr val="F8FAF9"/></a:lt2>
-      <a:accent1><a:srgbClr val="${accents[0]}"/></a:accent1>
-      <a:accent2><a:srgbClr val="${accents[1]}"/></a:accent2>
-      <a:accent3><a:srgbClr val="${accents[2]}"/></a:accent3>
-      <a:accent4><a:srgbClr val="${accents[3]}"/></a:accent4>
-      <a:accent5><a:srgbClr val="${accents[4]}"/></a:accent5>
-      <a:accent6><a:srgbClr val="${accents[5]}"/></a:accent6>
-      <a:hlink><a:srgbClr val="0563C1"/></a:hlink>
-      <a:folHlink><a:srgbClr val="954F72"/></a:folHlink>
-    </a:clrScheme>
-    <a:fontScheme name="Office">
-      <a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>
-      <a:minorFont><a:latin typeface="Aptos"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>
-    </a:fontScheme>
-    <a:fmtScheme name="Office">
-      <a:fillStyleLst>
-        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
-        <a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"/></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"><a:tint val="50000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>
-        <a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"/></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"><a:shade val="50000"/></a:schemeClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>
-      </a:fillStyleLst>
-      <a:lnStyleLst>
-        <a:ln w="6350" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>
-        <a:ln w="12700" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>
-        <a:ln w="19050" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/></a:ln>
-      </a:lnStyleLst>
-      <a:effectStyleLst>
-        <a:effectStyle><a:effectLst/></a:effectStyle>
-        <a:effectStyle><a:effectLst/></a:effectStyle>
-        <a:effectStyle><a:effectLst/></a:effectStyle>
-      </a:effectStyleLst>
-      <a:bgFillStyleLst>
-        <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
-        <a:solidFill><a:schemeClr val="phClr"><a:tint val="95000"/></a:schemeClr></a:solidFill>
-        <a:solidFill><a:schemeClr val="phClr"><a:shade val="95000"/></a:schemeClr></a:solidFill>
-      </a:bgFillStyleLst>
-    </a:fmtScheme>
-  </a:themeElements>
-  <a:objectDefaults/>
-  <a:extraClrSchemeLst/>
-</a:theme>
-`;
-}
-
-function buildOfficeThemeBlob() {
-  return makeZipBlob([
-    {
-      name: "[Content_Types].xml",
-      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/theme/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
-</Types>
-`,
-    },
-    {
-      name: "_rels/.rels",
-      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme/theme1.xml"/>
-</Relationships>
-`,
-    },
-    {
-      name: "theme/theme/theme1.xml",
-      data: buildOfficeThemeXml(),
-    },
-  ]);
-}
-
 async function exportFile(format) {
   const base = sanitizeFilename(activeImageName);
   const files = {
@@ -717,38 +643,22 @@ async function exportFile(format) {
       filename: `${base}-adobe-swatches.ase`,
       blob: buildAseBlob(),
     }),
-    stylx: () => ({
-      filename: `${base}-arcgis-pro.stylx`,
-      blob: makeTextBlob(buildArcGisStylxManifest(), "application/json"),
-    }),
-    qgis: () => ({
+    xml: () => ({
       filename: `${base}-qgis_style.xml`,
       blob: makeTextBlob(buildQgisStyleXml(), "application/xml"),
-    }),
-    thmx: () => ({
-      filename: `${base}-office_theme.thmx`,
-      blob: buildOfficeThemeBlob(),
-    }),
-    json: () => ({
-      filename: `${base}-palette.json`,
-      blob: makeTextBlob(`${buildPaletteRecord()}\n`, "application/json"),
-    }),
-    css: () => ({
-      filename: `${base}-palette.css`,
-      blob: makeTextBlob(buildCssText(), "text/css"),
-    }),
-    scss: () => ({
-      filename: `${base}-palette.scss`,
-      blob: makeTextBlob(buildScssText(), "text/x-scss"),
     }),
     csv: () => ({
       filename: `${base}-palette.csv`,
       blob: makeTextBlob(buildCsvText(), "text/csv"),
     }),
+    json: () => ({
+      filename: `${base}-palette.json`,
+      blob: makeTextBlob(`${buildPaletteRecord()}\n`, "application/json"),
+    }),
   };
 
   if (format === "all") {
-    const bundledFormats = ["ase", "stylx", "qgis", "thmx", "json", "css", "scss", "csv"];
+    const bundledFormats = ["ase", "xml", "csv", "json"];
     const zipFiles = [];
     for (const bundledFormat of bundledFormats) {
       const file = await exportFile(bundledFormat);
@@ -773,80 +683,182 @@ async function downloadExport(format) {
 }
 
 async function savePaletteAssets() {
-  if (!currentPalette.length) return;
+  if (!currentPalette.length || !previewImage) return;
 
   const scale = 2;
-  const width = 1500;
-  const margin = 64;
-  const gap = 54;
-  const leftWidth = 630;
+  const width = 1600;
+  const margin = 72;
+  const gap = 52;
+  const leftWidth = 610;
   const rightX = margin + leftWidth + gap;
   const rightWidth = width - margin - rightX;
-  const stackY = 112;
-  const stackHeight = 72;
-  const rowHeight = 118;
-  const rowsTop = 224;
-  const height = Math.max(920, rowsTop + currentPalette.length * rowHeight + 64);
+  const headerY = 42;
+  const contentY = 214;
+  const rowHeight = 104;
+  const rowsTop = contentY + 230;
+  const height = Math.max(1040, rowsTop + currentPalette.length * rowHeight + 80);
   const canvas = document.createElement("canvas");
   const cardCtx = canvas.getContext("2d");
   canvas.width = width * scale;
   canvas.height = height * scale;
   cardCtx.scale(scale, scale);
 
-  cardCtx.fillStyle = "#FFFFFF";
+  const dominant = currentPalette[0];
+  const second = currentPalette[1] || dominant;
+  const third = currentPalette[2] || second;
+  const background = cardCtx.createLinearGradient(0, 0, width, height);
+  background.addColorStop(0, "#F7F1E8");
+  background.addColorStop(0.42, "#F4F7F4");
+  background.addColorStop(1, "#E9EEF0");
+  cardCtx.fillStyle = background;
   cardCtx.fillRect(0, 0, width, height);
 
-  cardCtx.strokeStyle = "#E2E7EA";
-  cardCtx.lineWidth = 2;
-  cardCtx.strokeRect(margin, 112, leftWidth, height - 176);
-  cardCtx.fillStyle = "#F8FAF9";
-  cardCtx.fillRect(margin + 1, 113, leftWidth - 2, height - 178);
-  drawContainedImage(cardCtx, previewImage, margin + 22, 134, leftWidth - 44, height - 220);
+  cardCtx.save();
+  cardCtx.globalAlpha = 0.54;
+  cardCtx.translate(width * 0.5, height * 0.47);
+  cardCtx.rotate(-0.18);
+  cardCtx.fillStyle = paletteRgba(dominant, 0.32);
+  cardCtx.fillRect(-980, -420, 820, 1700);
+  cardCtx.fillStyle = paletteRgba(second, 0.26);
+  cardCtx.fillRect(-120, -520, 560, 1700);
+  cardCtx.fillStyle = paletteRgba(third, 0.22);
+  cardCtx.fillRect(520, -520, 500, 1700);
+  cardCtx.restore();
 
-  cardCtx.fillStyle = "#182027";
-  cardCtx.font = "800 42px system-ui, sans-serif";
-  cardCtx.fillText("原图", margin, 82);
-  cardCtx.font = "800 46px system-ui, sans-serif";
-  cardCtx.fillText("图片主色提取色卡", rightX, 82);
+  cardCtx.save();
+  cardCtx.globalAlpha = 0.28;
+  cardCtx.strokeStyle = "rgba(23, 32, 42, 0.12)";
+  cardCtx.lineWidth = 1;
+  for (let x = 0; x <= width; x += 64) {
+    cardCtx.beginPath();
+    cardCtx.moveTo(x, 0);
+    cardCtx.lineTo(x, height);
+    cardCtx.stroke();
+  }
+  for (let y = 0; y <= height; y += 64) {
+    cardCtx.beginPath();
+    cardCtx.moveTo(0, y);
+    cardCtx.lineTo(width, y);
+    cardCtx.stroke();
+  }
+  cardCtx.restore();
 
-  let x = rightX;
-  const stackW = rightWidth;
+  fillRoundedRect(cardCtx, margin, headerY, 154, 38, 19, "rgba(255, 255, 255, 0.76)");
+  cardCtx.fillStyle = "#285F78";
+  cardCtx.font = "800 18px system-ui, sans-serif";
+  cardCtx.fillText("PALETTE STUDIO", margin + 22, headerY + 25);
+  cardCtx.fillStyle = "#17202A";
+  cardCtx.font = "900 48px system-ui, sans-serif";
+  cardCtx.fillText("图片主色提取色卡", margin, headerY + 95);
+  cardCtx.fillStyle = "#657180";
+  cardCtx.font = "700 21px system-ui, sans-serif";
+  const summaryText = `${activeImageName} · ${currentPalette.length} 个主色 · 最高占比 ${Math.round(dominant.ratio * 100)}%`;
+  cardCtx.fillText(fittedCanvasText(cardCtx, summaryText, width - margin * 2), margin, headerY + 132);
+
+  const originalCardY = contentY;
+  const originalCardH = height - contentY - 72;
+  cardCtx.shadowColor = "rgba(28, 34, 43, 0.18)";
+  cardCtx.shadowBlur = 34;
+  cardCtx.shadowOffsetY = 18;
+  fillRoundedRect(cardCtx, margin, originalCardY, leftWidth, originalCardH, 18, "rgba(255, 255, 255, 0.82)");
+  cardCtx.shadowColor = "transparent";
+  strokeRoundedRect(cardCtx, margin, originalCardY, leftWidth, originalCardH, 18, "rgba(255, 255, 255, 0.86)", 2);
+
+  cardCtx.fillStyle = "#17202A";
+  cardCtx.font = "900 28px system-ui, sans-serif";
+  cardCtx.fillText("原图", margin + 32, originalCardY + 50);
+  cardCtx.fillStyle = "#657180";
+  cardCtx.font = "700 17px system-ui, sans-serif";
+  cardCtx.fillText("作为色彩来源的图片预览", margin + 32, originalCardY + 78);
+
+  const imageX = margin + 32;
+  const imageY = originalCardY + 112;
+  const imageW = leftWidth - 64;
+  const imageH = originalCardH - 148;
+  fillRoundedRect(cardCtx, imageX, imageY, imageW, imageH, 16, "#F8FAF9");
+  cardCtx.save();
+  roundedRectPath(cardCtx, imageX, imageY, imageW, imageH, 16);
+  cardCtx.clip();
+  drawContainedImage(cardCtx, previewImage, imageX, imageY, imageW, imageH);
+  cardCtx.restore();
+  strokeRoundedRect(cardCtx, imageX, imageY, imageW, imageH, 16, "rgba(23, 32, 42, 0.12)", 2);
+
+  cardCtx.shadowColor = "rgba(28, 34, 43, 0.16)";
+  cardCtx.shadowBlur = 30;
+  cardCtx.shadowOffsetY = 16;
+  fillRoundedRect(cardCtx, rightX, contentY, rightWidth, 164, 18, "rgba(255, 255, 255, 0.84)");
+  cardCtx.shadowColor = "transparent";
+  strokeRoundedRect(cardCtx, rightX, contentY, rightWidth, 164, 18, "rgba(255, 255, 255, 0.88)", 2);
+
+  cardCtx.fillStyle = "#285F78";
+  cardCtx.font = "900 18px system-ui, sans-serif";
+  cardCtx.fillText("COLOR RATIO", rightX + 32, contentY + 44);
+  cardCtx.fillStyle = "#17202A";
+  cardCtx.font = "900 34px system-ui, sans-serif";
+  cardCtx.fillText("主色占比分布", rightX + 32, contentY + 86);
+
+  const stackX = rightX + 32;
+  const stackY = contentY + 108;
+  const stackW = rightWidth - 64;
+  const stackHeight = 34;
+  fillRoundedRect(cardCtx, stackX, stackY, stackW, stackHeight, 17, "#EDF2F2");
+  cardCtx.save();
+  roundedRectPath(cardCtx, stackX, stackY, stackW, stackHeight, 17);
+  cardCtx.clip();
+  let x = stackX;
   for (const color of currentPalette) {
     const segmentW = stackW * color.ratio;
     cardCtx.fillStyle = color.hex;
-    cardCtx.fillRect(x, stackY, segmentW, stackHeight);
+    cardCtx.fillRect(x, stackY, segmentW, stackHeight + 1);
     x += segmentW;
   }
-
-  cardCtx.strokeStyle = "#DDE3E7";
-  cardCtx.lineWidth = 2;
-  cardCtx.strokeRect(rightX, stackY, stackW, stackHeight);
-  cardCtx.fillStyle = "#66717D";
-  cardCtx.font = "700 19px system-ui, sans-serif";
-  cardCtx.fillText(`${currentPalette.length} 个主色 · 最高占比 ${Math.round(currentPalette[0].ratio * 100)}%`, rightX, stackY + stackHeight + 34);
+  cardCtx.restore();
+  strokeRoundedRect(cardCtx, stackX, stackY, stackW, stackHeight, 17, "rgba(23, 32, 42, 0.12)", 1.5);
 
   currentPalette.forEach((color, index) => {
     const y = rowsTop + index * rowHeight;
-    const swatchWidth = Math.floor(rightWidth * 0.5);
-    const swatchHeight = 88;
-    const textX = rightX + swatchWidth + 28;
+    const rowX = rightX;
+    const rowW = rightWidth;
+    const colorW = 168;
+    const colorH = 74;
+    const textX = rowX + colorW + 52;
+    const percent = `${(color.ratio * 100).toFixed(1)}%`;
 
-    cardCtx.strokeStyle = "#E2E7EA";
-    cardCtx.lineWidth = 2;
-    cardCtx.strokeRect(rightX, y, rightWidth, swatchHeight);
+    cardCtx.shadowColor = "rgba(28, 34, 43, 0.11)";
+    cardCtx.shadowBlur = 20;
+    cardCtx.shadowOffsetY = 10;
+    fillRoundedRect(cardCtx, rowX, y, rowW, 82, 16, "rgba(255, 255, 255, 0.82)");
+    cardCtx.shadowColor = "transparent";
+    strokeRoundedRect(cardCtx, rowX, y, rowW, 82, 16, "rgba(255, 255, 255, 0.86)", 1.5);
+
+    fillRoundedRect(cardCtx, rowX + 16, y + 12, colorW, colorH - 14, 12, color.hex);
+    cardCtx.fillStyle = "rgba(255, 255, 255, 0.26)";
+    cardCtx.fillRect(rowX + 16, y + 12, colorW, 18);
+    cardCtx.fillStyle = paletteRgba(color, 0.14);
+    cardCtx.fillRect(textX - 18, y + 14, 4, 54);
+
+    cardCtx.fillStyle = "#8A96A0";
+    cardCtx.font = "900 15px system-ui, sans-serif";
+    cardCtx.fillText(`COLOR ${String(index + 1).padStart(2, "0")}`, textX, y + 28);
+    cardCtx.fillStyle = "#17202A";
+    cardCtx.font = "900 29px system-ui, sans-serif";
+    cardCtx.fillText(color.hex, textX, y + 59);
+
+    cardCtx.fillStyle = "#657180";
+    cardCtx.font = "700 18px system-ui, sans-serif";
+    cardCtx.fillText(`RGB ${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)}`, textX + 190, y + 58);
+
+    const badgeW = 106;
+    const badgeX = rowX + rowW - badgeW - 24;
+    fillRoundedRect(cardCtx, badgeX, y + 24, badgeW, 36, 18, "rgba(237, 244, 242, 0.94)");
     cardCtx.fillStyle = color.hex;
-    cardCtx.fillRect(rightX, y, swatchWidth, swatchHeight);
-
-    cardCtx.fillStyle = "#182027";
-    cardCtx.font = "800 34px system-ui, sans-serif";
-    cardCtx.fillText(color.hex, textX, y + 36);
-    cardCtx.fillStyle = "#66717D";
-    cardCtx.font = "600 20px system-ui, sans-serif";
-    cardCtx.fillText(`RGB ${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)}`, textX, y + 70);
-    cardCtx.fillStyle = "#182027";
-    cardCtx.font = "800 28px system-ui, sans-serif";
+    cardCtx.beginPath();
+    cardCtx.arc(badgeX + 20, y + 42, 7, 0, Math.PI * 2);
+    cardCtx.fill();
+    cardCtx.fillStyle = "#17202A";
+    cardCtx.font = "900 18px system-ui, sans-serif";
     cardCtx.textAlign = "right";
-    cardCtx.fillText(`${(color.ratio * 100).toFixed(1)}%`, rightX + rightWidth - 22, y + 54);
+    cardCtx.fillText(percent, badgeX + badgeW - 16, y + 48);
     cardCtx.textAlign = "left";
   });
 
@@ -922,5 +934,3 @@ downloadButton.addEventListener("click", savePaletteAssets);
 loadSampleButton.addEventListener("click", () => {
   loadImage(SAMPLE_IMAGE, "示例图片");
 });
-
-loadImage(SAMPLE_IMAGE, "示例图片");

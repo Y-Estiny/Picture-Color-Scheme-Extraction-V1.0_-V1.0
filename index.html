@@ -37,7 +37,6 @@
           </label>
 
           <div class="preview-frame" id="previewFrame">
-            <img id="previewImage" alt="待提取颜色的图片预览" />
             <div class="empty-preview" id="emptyPreview">
               <span>预览区</span>
             </div>
@@ -88,36 +87,19 @@
                 <strong>ASE</strong>
                 <span>Adobe 色板</span>
               </button>
-              <button class="export-button" type="button" data-export="stylx">
-                <strong>STYLX</strong>
-                <span>ArcGIS Pro</span>
-              </button>
-              <button class="export-button" type="button" data-export="qgis">
+              <button class="export-button" type="button" data-export="xml">
                 <strong>XML</strong>
                 <span>QGIS 样式</span>
-              </button>
-              <button class="export-button" type="button" data-export="thmx">
-                <strong>THMX</strong>
-                <span>Office 主题</span>
-              </button>
-              <button class="export-button" type="button" data-export="json">
-                <strong>JSON</strong>
-                <span>通用数据</span>
-              </button>
-              <button class="export-button" type="button" data-export="css">
-                <strong>CSS</strong>
-                <span>网页变量</span>
-              </button>
-              <button class="export-button" type="button" data-export="scss">
-                <strong>SCSS</strong>
-                <span>Sass 变量</span>
               </button>
               <button class="export-button" type="button" data-export="csv">
                 <strong>CSV</strong>
                 <span>表格交换</span>
               </button>
+              <button class="export-button" type="button" data-export="json">
+                <strong>JSON</strong>
+                <span>通用数据</span>
+              </button>
             </div>
-            <p class="record-hint">ArcGIS Pro 的 .stylx 属于原生样式库格式，当前导出为可迁移的颜色样式清单，建议导入前先用小样本验证。</p>
           </div>
 
           <div class="empty-state" id="emptyState">

@@ -11,7 +11,7 @@
 - 显示每个颜色的 HEX、RGB 和百分比
 - 支持一键复制单个 HEX 色值
 - 支持导出 PNG 色卡图
-- 支持导出多种设计软件和通用交换格式
+- 支持导出常用色卡和通用交换格式
 
 ## 导出格式
 
@@ -19,16 +19,12 @@
 | --- | --- |
 | `.png` | 可视化色卡图，适合展示、分享和归档 |
 | `.ase` | Adobe 色板文件，适合 Photoshop、Illustrator、InDesign 等 |
-| `.stylx` | ArcGIS Pro 配色迁移清单 |
 | `qgis_style.xml` | QGIS 样式文件 |
-| `office_theme.thmx` | Microsoft PowerPoint / Word / Excel 主题文件 |
-| `.json` | 通用结构化配色数据 |
-| `.css` | CSS 变量 |
-| `.scss` | SCSS 变量和颜色映射 |
 | `.csv` | 表格、GIS、数据可视化等通用交换 |
-| `.zip` | 一次性打包全部软件适配格式 |
+| `.json` | 通用结构化配色数据 |
+| `.zip` | 一次性打包 ASE、XML、CSV、JSON |
 
-> 注意：ArcGIS Pro 的原生 `.stylx` 是样式库数据库格式。当前导出的 `.stylx` 文件用于迁移颜色信息和 CIM RGBColor 数据，建议在 ArcGIS Pro 中先用小样本验证导入流程。
+> 当前保留 ASE、XML、CSV、JSON 四种稳定导出格式。
 
 ## 使用方式
 
@@ -71,6 +67,6 @@ http://127.0.0.1:4173/index.html
 ## 适合场景
 
 - 从参考图中快速提取品牌或视觉配色
-- 为 Photoshop、QGIS、Office、前端页面等生成可复用色卡
+- 为 Photoshop、QGIS、表格工具和通用数据流程生成可复用色卡
 - 为设计汇报、视觉分析、地图制图和数据可视化准备配色素材
 - 建立图片到设计系统颜色变量的轻量工作流
